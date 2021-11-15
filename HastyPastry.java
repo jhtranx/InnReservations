@@ -33,10 +33,19 @@ export HP_JDBC_URL=jdbc:mysql://db.labthreesixfive.com/winter2020?autoReconnect=
 export HP_JDBC_USER=jmustang
 export HP_JDBC_PW=...
  */
+
+/*export CLASSPATH=$CLASSPATH:mysql-connector-java-8.0.16.jar:.
+export HP_JDBC_URL=jdbc:mysql://db.labthreesixfive.com/fall2021?autoReconnect=true\&useSSL=false
+export HP_JDBC_USER=etruon08
+export HP_JDBC_PW=025932601
+*/
+
 public class HastyPastry {
     public static void main(String[] args) {
 	try {
+		System.out.println("hello");
 	    HastyPastry hp = new HastyPastry();
+		System.out.println("hello");
             int demoNum = Integer.parseInt(args[0]);
             
             switch (demoNum) {
