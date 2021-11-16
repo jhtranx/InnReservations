@@ -72,7 +72,8 @@ public class InnReservations {
             // int demoNum = Integer.parseInt(args[0]);
             
             switch (demoNum) {
-            case 1: ir.demo1(); break;
+            case 0: break;
+            case 1: ir.fr1(); break;
             case 2: ir.demo2(); break;
             case 3: ir.demo3(); break;
             case 4: ir.demo4(); break;
@@ -86,10 +87,10 @@ public class InnReservations {
         }
     }
 
-    // Demo1 - Establish JDBC connection, execute DDL statement
-    private void demo1() throws SQLException {
+    // FR1 - Establish JDBC connection, execute DDL statement
+    private void fr1() throws SQLException {
 
-        System.out.println("demo1: Add AvailUntil column to hp_goods table\r\n");
+        System.out.println("FR1: Rooms and Rates: Rooms will be listed based on popularity from highest to lowest.\r\n");
         
 	// Step 0: Load MySQL JDBC Driver
 	// No longer required as of JDBC 2.0  / Java 6
@@ -106,17 +107,27 @@ public class InnReservations {
 							   System.getenv("HP_JDBC_USER"),
 							   System.getenv("HP_JDBC_PW"))) {
 	    // Step 2: Construct SQL statement
-	    String sql = "ALTER TABLE hp_goods ADD COLUMN AvailUntil DATE";
+	    // String sql = "ALTER TABLE hp_goods ADD COLUMN AvailUntil DATE";
+        String sql = "SELECT * FROM lab7_rooms";
 
 	    // Step 3: (omitted in this example) Start transaction
 
-	    try (Statement stmt = conn.createStatement()) {
+	    // Step 4: Send SQL statement to DBMS
+	    try (Statement stmt = conn.createStatement();
+		 ResultSet rs = stmt.executeQuery(sql)) {
 
-		// Step 4: Send SQL statement to DBMS
-		boolean exRes = stmt.execute(sql);
-		
-		// Step 5: Handle results
-		System.out.format("Result from ALTER: %b %n", exRes);
+		// Step 5: Receive results
+		while (rs.next()) {
+            // RoomCode	RoomName	Beds	bedType	maxOcc	basePrice	decor
+		    String roomCode = rs.getString("RoomCode");
+		    String roomName = rs.getString("RoomName");
+		    int numBeds = rs.getInt("Beds");
+            String bedType = rs.getString("bedType");
+		    int maxOcc = rs.getInt("maxOcc");
+		    float basePrice = rs.getFloat("basePrice");
+            String decor = rs.getString("decor");
+		    System.out.format("%s %s %d %s %d ($%.2f) %s \n", roomCode, roomName, numBeds, bedType, maxOcc, basePrice, decor);
+		}
 	    }
 
 	    // Step 6: (omitted in this example) Commit or rollback transaction
