@@ -118,7 +118,6 @@ public class InnReservations {
 
 		// Step 5: Receive results
 		while (rs.next()) {
-            // RoomCode	RoomName	Beds	bedType	maxOcc	basePrice	decor
 		    String roomCode = rs.getString("RoomCode");
 		    String roomName = rs.getString("RoomName");
 		    int numBeds = rs.getInt("Beds");
