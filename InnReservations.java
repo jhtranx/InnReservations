@@ -13,19 +13,45 @@ import java.util.List;
 import java.util.ArrayList;
 
 /*
-Introductory JDBC examples based loosely on the BAKERY dataset from CSC 365 labs.
+JDBC setup (on Emily's labthreesixfive)
 
 -- MySQL setup:
-drop table if exists hp_goods, hp_customers, hp_items, hp_receipts;
-create table hp_goods as select * from BAKERY.goods;
-create table hp_customers as select * from BAKERY.customers;
-create table hp_items as select * from BAKERY.items;
-create table hp_receipts as select * from BAKERY.receipts;
+drop table if exists lab7_reservations, lab7_rooms;
 
-grant all on amigler.hp_goods to hasty@'%';
-grant all on amigler.hp_customers to hasty@'%';
-grant all on amigler.hp_items to hasty@'%';
-grant all on amigler.hp_receipts to hasty@'%';
+grant all on etruon08.lab7_rooms to jtran179@'%';
+grant all on etruon08.lab7_reservations to maprasad@'%';
+
+CREATE TABLE IF NOT EXISTS lab7_rooms (
+    RoomCode char(5) PRIMARY KEY,
+    RoomName varchar(30) NOT NULL,
+    Beds int(11) NOT NULL,
+    bedType varchar(8) NOT NULL,
+    maxOcc int(11) NOT NULL,
+    basePrice DECIMAL(6,2) NOT NULL,
+    decor varchar(20) NOT NULL,
+    UNIQUE (RoomName)
+);
+
+CREATE TABLE IF NOT EXISTS lab7_reservations (
+    CODE int(11) PRIMARY KEY,
+    Room char(5) NOT NULL,
+    CheckIn date NOT NULL,
+    Checkout date NOT NULL,
+    Rate DECIMAL(6,2) NOT NULL,
+    LastName varchar(15) NOT NULL,
+    FirstName varchar(15) NOT NULL,
+    Adults int(11) NOT NULL,
+    Kids int(11) NOT NULL,
+    FOREIGN KEY (Room) REFERENCES lab7_rooms (RoomCode)
+);
+    
+INSERT INTO lab7_rooms SELECT * FROM INN.rooms;
+    
+-- Use DATE_ADD to shift reservation dates to current year
+INSERT INTO lab7_reservations SELECT CODE, Room,
+    DATE_ADD(CheckIn, INTERVAL 132 MONTH),
+    DATE_ADD(Checkout, INTERVAL 132 MONTH),
+    Rate, LastName, FirstName, Adults, Kids FROM INN.reservations;
 
 -- Shell init:
 export CLASSPATH=$CLASSPATH:mysql-connector-java-8.0.16.jar:.
@@ -34,26 +60,24 @@ export HP_JDBC_USER=jmustang
 export HP_JDBC_PW=...
  */
 
-/*export CLASSPATH=$CLASSPATH:mysql-connector-java-8.0.16.jar:.
-export HP_JDBC_URL=jdbc:mysql://db.labthreesixfive.com/fall2021?autoReconnect=true\&useSSL=false
-export HP_JDBC_USER=etruon08
-export HP_JDBC_PW=025932601
-*/
-
-public class HastyPastry {
+public class InnReservations {
     public static void main(String[] args) {
 	try {
-		System.out.println("hello");
-	    HastyPastry hp = new HastyPastry();
-		System.out.println("hello");
-            int demoNum = Integer.parseInt(args[0]);
+        Scanner sc = new Scanner(System.in);
+		System.out.println("Welcome to our CSC 365 Inn Reservation System!");
+        System.out.println("Please select an option: 1, 2, 3, 4, 5, 6 (0 = quit)");
+        int demoNum = sc.nextInt(); 
+
+	    InnReservations ir = new InnReservations();
+            // int demoNum = Integer.parseInt(args[0]);
             
             switch (demoNum) {
-            case 1: hp.demo1(); break;
-            case 2: hp.demo2(); break;
-            case 3: hp.demo3(); break;
-            case 4: hp.demo4(); break;
-            case 5: hp.demo5(); break;
+            case 0: break;
+            case 1: ir.fr1(); break;
+            case 2: ir.demo2(); break;
+            case 3: ir.demo3(); break;
+            case 4: ir.demo4(); break;
+            case 5: ir.demo5(); break;
             }
             
 	} catch (SQLException e) {
@@ -63,10 +87,10 @@ public class HastyPastry {
         }
     }
 
-    // Demo1 - Establish JDBC connection, execute DDL statement
-    private void demo1() throws SQLException {
+    // FR1 - Establish JDBC connection, execute DDL statement
+    private void fr1() throws SQLException {
 
-        System.out.println("demo1: Add AvailUntil column to hp_goods table\r\n");
+        System.out.println("FR1: Rooms and Rates: Rooms will be listed based on popularity from highest to lowest.\r\n");
         
 	// Step 0: Load MySQL JDBC Driver
 	// No longer required as of JDBC 2.0  / Java 6
@@ -83,17 +107,26 @@ public class HastyPastry {
 							   System.getenv("HP_JDBC_USER"),
 							   System.getenv("HP_JDBC_PW"))) {
 	    // Step 2: Construct SQL statement
-	    String sql = "ALTER TABLE hp_goods ADD COLUMN AvailUntil DATE";
+	    // String sql = "ALTER TABLE hp_goods ADD COLUMN AvailUntil DATE";
+        String sql = "SELECT * FROM lab7_rooms";
 
 	    // Step 3: (omitted in this example) Start transaction
 
-	    try (Statement stmt = conn.createStatement()) {
+	    // Step 4: Send SQL statement to DBMS
+	    try (Statement stmt = conn.createStatement();
+		 ResultSet rs = stmt.executeQuery(sql)) {
 
-		// Step 4: Send SQL statement to DBMS
-		boolean exRes = stmt.execute(sql);
-		
-		// Step 5: Handle results
-		System.out.format("Result from ALTER: %b %n", exRes);
+		// Step 5: Receive results
+		while (rs.next()) {
+		    String roomCode = rs.getString("RoomCode");
+		    String roomName = rs.getString("RoomName");
+		    int numBeds = rs.getInt("Beds");
+            String bedType = rs.getString("bedType");
+		    int maxOcc = rs.getInt("maxOcc");
+		    float basePrice = rs.getFloat("basePrice");
+            String decor = rs.getString("decor");
+		    System.out.format("%s %s %d %s %d ($%.2f) %s \n", roomCode, roomName, numBeds, bedType, maxOcc, basePrice, decor);
+		}
 	    }
 
 	    // Step 6: (omitted in this example) Commit or rollback transaction
