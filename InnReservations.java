@@ -78,7 +78,7 @@ public class InnReservations {
 				case 1: ir.fr1(); break;
 				case 2: ir.demo2(); break;
 				case 3: ir.fr3(); break;
-				case 4: ir.demo4(); break;
+				case 4: ir.fr4(); break;
 				case 5: ir.demo5(); break;
 				}
 				System.out.println("Please select an option: Rooms and Rates (1), Reservations (2), Reservation Changes (3), Reservation Cancellation (4), Detailed Reservation Information (5), Revenue (6) (0 = quit)");
@@ -404,7 +404,6 @@ public class InnReservations {
 				}
 				// Step 5: Handle results
 				//System.out.format("Updated %d records for %s pastries%n", rowCount, flavor);
-		
 				// Step 6: Commit or rollback transaction
 				conn.commit();
 			} catch (SQLException e) {
@@ -414,45 +413,57 @@ public class InnReservations {
 		// Step 7: Close connection (handled implcitly by try-with-resources syntax)
     }
 
-
     // Demo4 - Establish JDBC connection, execute DML query (UPDATE) using PreparedStatement / transaction    
-    private void demo4() throws SQLException {
+    private void fr4() throws SQLException {
 
-        System.out.println("demo4: Populate AvailUntil column using PreparedStatement\r\n");
+        System.out.println("FR4: Cancel an existing reservation.\r\n");
         
-	// Step 1: Establish connection to RDBMS
-	try (Connection conn = DriverManager.getConnection(System.getenv("HP_JDBC_URL"),
-							   System.getenv("HP_JDBC_USER"),
-							   System.getenv("HP_JDBC_PW"))) {
-	    // Step 2: Construct SQL statement
-	    Scanner scanner = new Scanner(System.in);
-	    System.out.print("Enter a flavor: ");
-	    String flavor = scanner.nextLine();
-	    System.out.format("Until what date will %s be available (YYYY-MM-DD)? ", flavor);
-	    LocalDate availDt = LocalDate.parse(scanner.nextLine());
-	    
-	    String updateSql = "UPDATE hp_goods SET AvailUntil = ? WHERE Flavor = ?";
-
-	    // Step 3: Start transaction
-	    conn.setAutoCommit(false);
-	    
-	    try (PreparedStatement pstmt = conn.prepareStatement(updateSql)) {
-		
-		// Step 4: Send SQL statement to DBMS
-		pstmt.setDate(1, java.sql.Date.valueOf(availDt));
-		pstmt.setString(2, flavor);
-		int rowCount = pstmt.executeUpdate();
-		
-		// Step 5: Handle results
-		System.out.format("Updated %d records for %s pastries%n", rowCount, flavor);
-
-		// Step 6: Commit or rollback transaction
-		conn.commit();
-	    } catch (SQLException e) {
-		conn.rollback();
-	    }
-
-	}
+		// Step 1: Establish connection to RDBMS
+		try (Connection conn = DriverManager.getConnection(System.getenv("HP_JDBC_URL"),
+								System.getenv("HP_JDBC_USER"),
+								System.getenv("HP_JDBC_PW"))) {
+			// Step 2: Construct SQL statement
+				Scanner scanner = new Scanner(System.in).useDelimiter("\n");
+				System.out.print("Enter a reservation code: ");
+				Integer resCode = scanner.nextInt();
+				String checkExistsSQL = "SELECT COUNT(*) FROM etruon08.lab7_reservations WHERE CODE = ?";
+				conn.setAutoCommit(false);
+				try (PreparedStatement pstmt = conn.prepareStatement(checkExistsSQL)) 
+				{
+					// Step 4: Send SQL statement to DBMS
+					pstmt.setInt(1, resCode);
+					ResultSet rs = pstmt.executeQuery();
+					while(rs.next()) {
+						int resExists = rs.getInt("COUNT(*)");
+						if (resExists == 0) {
+							System.out.println("Reservation does not exist.");
+						}
+						else {
+							System.out.format("Are you sure you want to delete Reservation #%d? (y/n) ", resCode);
+							String userResp = scanner.next();
+							if (userResp.equals("n")) {
+								break;
+							}
+							else {
+								String deleteRes = "DELETE FROM etruon08.lab7_reservations WHERE CODE = ?";
+								try (PreparedStatement pstmtDelete = conn.prepareStatement(deleteRes)) {
+									pstmtDelete.setInt(1, resCode);
+									pstmtDelete.executeUpdate();
+									conn.commit();
+									System.out.format("Reservation #%d successfully deleted.%n", resCode);
+								} catch (SQLException e) {
+									System.out.println(e.getMessage());
+									conn.rollback();
+								}
+							}
+						}
+					}
+					conn.commit();
+				} catch (SQLException e) {
+					System.out.println(e.getMessage());
+					conn.rollback();
+				}
+		}
 	// Step 7: Close connection (handled implcitly by try-with-resources syntax)
     }
 
