@@ -11,6 +11,8 @@ import java.util.LinkedHashMap;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.logging.Logger;
+import java.util.logging.Level;
 
 /*
 JDBC setup (on Emily's labthreesixfive)
@@ -62,29 +64,32 @@ export HP_JDBC_PW=...
 
 public class InnReservations {
     public static void main(String[] args) {
-	try {
-        Scanner sc = new Scanner(System.in);
-		System.out.println("Welcome to our CSC 365 Inn Reservation System!");
-        System.out.println("Please select an option: 1, 2, 3, 4, 5, 6 (0 = quit)");
-        int demoNum = sc.nextInt(); 
+		try {
+			Scanner sc = new Scanner(System.in);
+			System.out.println("Welcome to our CSC 365 Inn Reservation System!");
+			System.out.println("Please select an option: Rooms and Rates (1), Reservations (2), Reservation Changes (3), Reservation Cancellation (4), Detailed Reservation Information (5), Revenue (6) (0 = quit)");
+			int demoNum = sc.nextInt(); 
 
-	    InnReservations ir = new InnReservations();
-            // int demoNum = Integer.parseInt(args[0]);
-            
-            switch (demoNum) {
-            case 0: break;
-            case 1: ir.fr1(); break;
-            case 2: ir.demo2(); break;
-            case 3: ir.demo3(); break;
-            case 4: ir.demo4(); break;
-            case 5: ir.demo5(); break;
-            }
-            
-	} catch (SQLException e) {
-	    System.err.println("SQLException: " + e.getMessage());
-	} catch (Exception e2) {
-            System.err.println("Exception: " + e2.getMessage());
-        }
+			InnReservations ir = new InnReservations();
+				// int demoNum = Integer.parseInt(args[0]);
+			while (demoNum != 0) {
+				switch (demoNum) {
+				case 0: break;
+				case 1: ir.fr1(); break;
+				case 2: ir.demo2(); break;
+				case 3: ir.fr3(); break;
+				case 4: ir.demo4(); break;
+				case 5: ir.demo5(); break;
+				}
+				System.out.println("Please select an option: Rooms and Rates (1), Reservations (2), Reservation Changes (3), Reservation Cancellation (4), Detailed Reservation Information (5), Revenue (6) (0 = quit)");
+				demoNum = sc.nextInt(); 
+			}
+				
+		} catch (SQLException e) {
+			System.err.println("SQLException: " + e.getMessage());
+		} catch (Exception e2) {
+				System.err.println("Exception: " + e2.getMessage());
+			}
     }
 
     // FR1 - Establish JDBC connection, execute DDL statement
@@ -172,42 +177,241 @@ public class InnReservations {
     // -------------------------------------------
     // Never (ever) write database code like this!
     // -------------------------------------------
-    private void demo3() throws SQLException {
+    private void fr3() throws SQLException {
 
-        System.out.println("demo3: Populate AvailUntil column using string concatenation\r\n");
+    	System.out.println("FR3: Make changes to an existing reservation.\r\n");
         
-	// Step 1: Establish connection to RDBMS
-	try (Connection conn = DriverManager.getConnection(System.getenv("HP_JDBC_URL"),
-							   System.getenv("HP_JDBC_USER"),
-							   System.getenv("HP_JDBC_PW"))) {
-	    // Step 2: Construct SQL statement
-	    Scanner scanner = new Scanner(System.in);
-	    System.out.print("Enter a flavor: ");
-	    String flavor = scanner.nextLine();
-	    System.out.format("Until what date will %s be available (YYYY-MM-DD)? ", flavor);
-	    String availUntilDate = scanner.nextLine();
+		// Step 1: Establish connection to RDBMS
+		try (Connection conn = DriverManager.getConnection(System.getenv("HP_JDBC_URL"),
+								System.getenv("HP_JDBC_USER"),
+								System.getenv("HP_JDBC_PW"))) {
+			// Step 2: Construct SQL statement
+			Scanner scanner = new Scanner(System.in).useDelimiter("\n");
+			System.out.print("Enter a reservation code: ");
+			Integer resCode = scanner.nextInt();
+			String checkExistsSQL = "SELECT COUNT(*) FROM etruon08.lab7_reservations WHERE CODE = ?";
+			conn.setAutoCommit(false);
+			try (PreparedStatement pstmt = conn.prepareStatement(checkExistsSQL)) 
+			{
+				// Step 4: Send SQL statement to DBMS
+				pstmt.setInt(1, resCode);
+				ResultSet rs = pstmt.executeQuery();
+				while(rs.next()) {
+					int resExists = rs.getInt("COUNT(*)");
+					if (resExists == 0) {
+						System.out.println("Reservation does not exist.");
+					}
+					else {
+						System.out.print("Update first name (1), last name (2), begin date (3), end date (4), number of children (5), or number of adults (6) of reservation? (0 to quit) ");
+						Integer updateOption = scanner.nextInt();
+						while (updateOption != 0) {
+							if (updateOption == 1) {
+								System.out.print("Enter new first name ('no change' if no change desired): ");
+								String newFirst = scanner.next();
+								if(!newFirst.equals("no change")) {
+									String updateFirst = "UPDATE etruon08.lab7_reservations SET FirstName = ? WHERE CODE = ?";
+									try (PreparedStatement pstmtFirst = conn.prepareStatement(updateFirst)) {
+										pstmtFirst.setString(1, newFirst);
+										pstmtFirst.setInt(2, resCode);
+										pstmtFirst.executeUpdate();
+										System.out.format("Updated Reservation #%d first name to %s%n", resCode, newFirst);
+										conn.commit();
+									} catch (SQLException e) {
+										conn.rollback();
+										System.out.println(e.getMessage());
+									}
+								}
+								else {
+									System.out.format("Reservation #%d first name not updated%n", resCode);
+								}
+							}
+							if (updateOption == 2) {
+								System.out.print("Enter new last name ('no change' if no change desired): ");
+								String newLast = scanner.next();
+								if (!newLast.equals("no change")) {
+									String updateLast = "UPDATE etruon08.lab7_reservations SET LastName = ? WHERE CODE = ?";
+									try (PreparedStatement pstmtLast = conn.prepareStatement(updateLast)) {
+										pstmtLast.setString(1, newLast);
+										pstmtLast.setInt(2, resCode);
+										pstmtLast.executeUpdate();
+										System.out.format("Updated Reservation #%d last name to %s%n", resCode, newLast);
+										conn.commit();
+									} catch (SQLException e) {
+										conn.rollback();
+										System.out.println(e.getMessage());
+									}
+								}
+								else {
+									System.out.format("Reservation #%d last name not updated%n", resCode);
+								}
+							}
+							if (updateOption == 3) {
+								System.out.print("Enter new check-in date (format 'yyyy-mm-dd' or 'no change' if no change desired): ");
+								String newDateStr = scanner.next();
+								if (!newDateStr.equals("no change")) {
+									LocalDate newCheckin = LocalDate.parse(newDateStr);
+									String RoomCode = "";
+									String getRoom = "SELECT Room FROM etruon08.lab7_reservations WHERE CODE = ?";
+									String findConflicts = "SELECT COUNT(*) FROM etruon08.lab7_reservations WHERE ROOM = ? and CheckIn <= ? and Checkout > ? and CODE <> ?";
+									try(PreparedStatement roomStmt = conn.prepareStatement(getRoom)) {
+										roomStmt.setInt(1, resCode);
+										ResultSet rs2 = roomStmt.executeQuery();
+										while(rs2.next()) {
+											RoomCode = rs2.getString("Room");
+										}
+									} catch (SQLException e) {
+										System.out.println(e.getMessage());
+									}
+									try(PreparedStatement validateCheckin = conn.prepareStatement(findConflicts)) {
+										validateCheckin.setString(1, RoomCode);
+										validateCheckin.setDate(2, java.sql.Date.valueOf(newCheckin));
+										validateCheckin.setDate(3, java.sql.Date.valueOf(newCheckin));
+										validateCheckin.setInt(4, resCode);
+										ResultSet rs3 = validateCheckin.executeQuery();
+										while(rs3.next()) {
+											//String conflictRoom = rs3.getString("Room");
+											//String conflictCode = rs3.getString("CODE");
+											//System.out.print(conflictRoom + " " + conflictCode);
+											Integer conflictCount = rs3.getInt("COUNT(*)");
+											//System.out.println(conflictCount);
+											if (conflictCount > 0) {
+												System.out.println("Date conflicts with other reservations, please select a different date.");
+											}
+											else {
+												String updateCheckin = "UPDATE etruon08.lab7_reservations SET CheckIn = ? WHERE CODE = ?";
+												try (PreparedStatement pstmtCheckin = conn.prepareStatement(updateCheckin)) {
+													pstmtCheckin.setDate(1, java.sql.Date.valueOf(newCheckin));
+													pstmtCheckin.setInt(2, resCode);
+													pstmtCheckin.executeUpdate();
+													System.out.format("Updated Reservation #%d checkin date to %s%n", resCode, newDateStr);
+													conn.commit();
+												} catch (SQLException e) {
+													conn.rollback();
+													System.out.println(e.getMessage());
+												}
+											}
+										}
+									} catch (SQLException e) {
+										System.out.println(e.getMessage());
+									}
 
-	    // -------------------------------------------
-	    // Never (ever) write database code like this!
-	    // -------------------------------------------
-	    String updateSql = "UPDATE hp_goods SET AvailUntil = '" + availUntilDate + "' " +
-		               "WHERE Flavor = '" + flavor + "'";
+								}
+								else {
+									System.out.format("Reservation #%d checkin date not updated%n", resCode);
+								}
+							}
+							if (updateOption == 4) {
+								System.out.print("Enter new check-out date (format 'yyyy-mm-dd' or 'no change' if no change desired): ");
+								String newDateStr = scanner.next();
+								if (!newDateStr.equals("no change")) {
+									LocalDate newCheckout = LocalDate.parse(newDateStr);
+									String RoomCode = "";
+									String getRoom = "SELECT Room FROM etruon08.lab7_reservations WHERE CODE = ?";
+									String findConflicts = "SELECT COUNT(*) FROM etruon08.lab7_reservations WHERE ROOM = ? and CheckIn < ? and Checkout >= ? and CODE <> ?";
+									try(PreparedStatement roomStmt = conn.prepareStatement(getRoom)) {
+										roomStmt.setInt(1, resCode);
+										ResultSet rs2 = roomStmt.executeQuery();
+										while(rs2.next()) {
+											RoomCode = rs2.getString("Room");
+										}
+									} catch (SQLException e) {
+										System.out.println(e.getMessage());
+									}
+									try(PreparedStatement validateCheckout = conn.prepareStatement(findConflicts)) {
+										validateCheckout.setString(1, RoomCode);
+										validateCheckout.setDate(2, java.sql.Date.valueOf(newCheckout));
+										validateCheckout.setDate(3, java.sql.Date.valueOf(newCheckout));
+										validateCheckout.setInt(4, resCode);
+										ResultSet rs3 = validateCheckout.executeQuery();
+										while(rs3.next()) {
+											//String conflictRoom = rs3.getString("Room");
+											//String conflictCode = rs3.getString("CODE");
+											//System.out.print(conflictRoom + " " + conflictCode);
+											Integer conflictCount = rs3.getInt("COUNT(*)");
+											//System.out.println(conflictCount);
+											if (conflictCount > 0) {
+												System.out.println("Date conflicts with other reservations, please select a different date.");
+											}
+											else {
+												String updateCheckout = "UPDATE etruon08.lab7_reservations SET Checkout = ? WHERE CODE = ?";
+												try (PreparedStatement pstmtCheckout = conn.prepareStatement(updateCheckout)) {
+													pstmtCheckout.setDate(1, java.sql.Date.valueOf(newCheckout));
+													pstmtCheckout.setInt(2, resCode);
+													pstmtCheckout.executeUpdate();
+													System.out.format("Updated Reservation #%d checkout date to %s%n", resCode, newDateStr);
+													conn.commit();
+												} catch (SQLException e) {
+													conn.rollback();
+													System.out.println(e.getMessage());
+												}
+											}
+										}
+									} catch (SQLException e) {
+										System.out.println(e.getMessage());
+									}
 
-	    // Step 3: (omitted in this example) Start transaction
-	    
-	    try (Statement stmt = conn.createStatement()) {
+								}
+								else {
+									System.out.format("Reservation #%d checkout date not updated%n", resCode);
+								}
+							}
+							if (updateOption == 5) {
+								System.out.print("Enter new number of children ('no change' if no change desired): ");
+								String NumChildrenStr = scanner.next();
+								if(!NumChildrenStr.equals("no change")) {
+									int newNumChildren = Integer.parseInt(NumChildrenStr);
+									String updateNumChildren = "UPDATE etruon08.lab7_reservations SET Kids = ? WHERE CODE = ?";
+									try (PreparedStatement pstmtNC = conn.prepareStatement(updateNumChildren)) {
+										pstmtNC.setInt(1, newNumChildren);
+										pstmtNC.setInt(2, resCode);
+										pstmtNC.executeUpdate();
+										System.out.format("Updated Reservation #%d number of children to %s%n", resCode, newNumChildren);
+										conn.commit();
+									} catch (SQLException e) {
+										conn.rollback();
+										System.out.println(e.getMessage());
+									}
+								}
+								else {
+									System.out.format("Reservation #%d number of children not updated%n", resCode);
+								}
+							}
+							if (updateOption == 6) {
+								System.out.print("Enter new number of adults ('no change' if no change desired): ");
+								String NumAdultsStr = scanner.next();
+								if(!NumAdultsStr.equals("no change")) {
+									int newNumAdults = Integer.parseInt(NumAdultsStr);
+									String updateNumAdults = "UPDATE etruon08.lab7_reservations SET Adults = ? WHERE CODE = ?";
+									try (PreparedStatement pstmtNA = conn.prepareStatement(updateNumAdults)) {
+										pstmtNA.setInt(1, newNumAdults);
+										pstmtNA.setInt(2, resCode);
+										pstmtNA.executeUpdate();
+										System.out.format("Updated Reservation #%d number of adults to %s%n", resCode, newNumAdults);
+										conn.commit();
+									} catch (SQLException e) {
+										conn.rollback();
+										System.out.println(e.getMessage());
+									}
+								}
+								else {
+									System.out.format("Reservation #%d number of adults not updated%n", resCode);
+								}
+							}
+							System.out.print("Update first name (1), last name (2), begin date (3), end date (4), number of children (5), or number of adults (6) of reservation? (0 to quit) ");
+							updateOption = scanner.nextInt();
+						}
+					}
+				}
+				// Step 5: Handle results
+				//System.out.format("Updated %d records for %s pastries%n", rowCount, flavor);
 		
-		// Step 4: Send SQL statement to DBMS
-		int rowCount = stmt.executeUpdate(updateSql);
-		
-		// Step 5: Handle results
-		System.out.format("Updated all '%s' flavored pastries (%d records) %n", flavor, rowCount);		
-	    }
-
-	    // Step 6: (omitted in this example) Commit or rollback transaction
-	    
-	}
-	// Step 7: Close connection (handled implcitly by try-with-resources syntax)
+				// Step 6: Commit or rollback transaction
+				conn.commit();
+			} catch (SQLException e) {
+				conn.rollback();
+			}
+		}
+		// Step 7: Close connection (handled implcitly by try-with-resources syntax)
     }
 
 
