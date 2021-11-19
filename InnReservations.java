@@ -6,6 +6,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 
 import java.util.Map;
+import java.util.Random;
 import java.util.Scanner;
 import java.util.LinkedHashMap;
 import java.time.LocalDate;
@@ -76,7 +77,7 @@ public class InnReservations {
 				switch (demoNum) {
 				case 0: break;
 				case 1: ir.fr1(); break;
-				case 2: ir.demo2(); break;
+				case 2: ir.fr2(); break;
 				case 3: ir.fr3(); break;
 				case 4: ir.fr4(); break;
 				case 5: ir.demo5(); break;
@@ -113,7 +114,7 @@ public class InnReservations {
 							   System.getenv("HP_JDBC_PW"))) {
 	    // Step 2: Construct SQL statement
 	    // String sql = "ALTER TABLE hp_goods ADD COLUMN AvailUntil DATE";
-        String sql = "SELECT * FROM lab7_rooms";
+        String sql = "SELECT * FROM res";
 
 	    // Step 3: (omitted in this example) Start transaction
 
@@ -125,12 +126,13 @@ public class InnReservations {
 		while (rs.next()) {
 		    String roomCode = rs.getString("RoomCode");
 		    String roomName = rs.getString("RoomName");
-		    int numBeds = rs.getInt("Beds");
-            String bedType = rs.getString("bedType");
-		    int maxOcc = rs.getInt("maxOcc");
-		    float basePrice = rs.getFloat("basePrice");
-            String decor = rs.getString("decor");
-		    System.out.format("%s %s %d %s %d ($%.2f) %s \n", roomCode, roomName, numBeds, bedType, maxOcc, basePrice, decor);
+		    Float popularity = rs.getFloat("Popularity");
+            String nextAvail = rs.getString("nextAvail");
+		    String checkOut = rs.getString("CheckOut");
+		    int totDays = rs.getInt("totDays");
+            System.out.format("%s %s %.2f %s %s %d \n", 
+			                    roomCode, roomName, popularity, 
+								nextAvail, checkOut, totDays);
 		}
 	    }
 
@@ -141,36 +143,126 @@ public class InnReservations {
     
 
     // Demo2 - Establish JDBC connection, execute SELECT query, read & print result
-    private void demo2() throws SQLException {
+    private void fr2() throws SQLException {
 
-        System.out.println("demo2: List content of hp_goods table\r\n");
+        System.out.println("FR2: Reservations\r\n");
         
 	// Step 1: Establish connection to RDBMS
 	try (Connection conn = DriverManager.getConnection(System.getenv("HP_JDBC_URL"),
 							   System.getenv("HP_JDBC_USER"),
 							   System.getenv("HP_JDBC_PW"))) {
 	    // Step 2: Construct SQL statement
-	    String sql = "SELECT * FROM hp_goods";
+	    Scanner sc = new Scanner(System.in);
+		System.out.println("Please enter your first name: ");
+		String firstName = sc.nextLine();
+		System.out.println("Please enter your last name: ");
+		String lastName = sc.nextLine();
+		System.out.println("Please enter your room code: (Enter 'Any' to indicate no preference)");
+		String roomCode = sc.nextLine();
+		System.out.println("Please enter your desired bed type: (Enter 'Any' to indicate not preference)");
+		String bedType = sc.nextLine();
+		System.out.println("Please enter your anticipated check-in date (yyyy-mm-dd): ");
+		String checkIn = sc.nextLine();
+		System.out.println("Please enter your anticipated check-out date (yyyy-mm-dd): ");
+		String checkOut = sc.nextLine();
+		System.out.println("Please enter the number of adults: ");
+		Integer numAdults = sc.nextInt();
+		System.out.println("Please enter the number of children: ");
+		Integer numChildren = sc.nextInt();
+		System.out.println("You have entered: " + firstName + lastName);
+		System.out.println(roomCode + " " + bedType + " " + checkIn + " " + checkOut + " " + numAdults + " " + numChildren);
+		Integer totOcc = numAdults + numChildren;
+		// String sql = "SELECT * FROM hp_goods";
 
 	    // Step 3: (omitted in this example) Start transaction
 
 	    // Step 4: Send SQL statement to DBMS
-	    try (Statement stmt = conn.createStatement();
-		 ResultSet rs = stmt.executeQuery(sql)) {
+
+		// Check if occ exceeds maxOcc
+		String getMaxOcc = "SELECT MAX(maxOcc) AS maxOccAllowed FROM lab7_rooms";
+		conn.setAutoCommit(false);
+	    try (PreparedStatement pstmt = conn.prepareStatement(getMaxOcc))
+		{
+			ResultSet rs = pstmt.executeQuery(getMaxOcc);
+			while(rs.next()) {
+				int maxOcc = rs.getInt("maxOccAllowed");
+				if (totOcc > maxOcc){
+					System.out.println("No suitable rooms are available");
+					break;
+					// RETURN TO MAIN MENU
+				}
+			}
+			
+		}
+		String[] roomCodeArr = {"AOB", "CAS", "FNA", "HBB", "IBD", "IBS", "MWC", "RND", "RTE", "SAY", "TAA"};
+		String[] bedTypeArr = {"Queen", "King", "Double"};
+
+		if (roomCode == "Any")
+		{
+			Random r=new Random();        
+			int randomNumber = r.nextInt(roomCodeArr.length);
+			roomCode = roomCodeArr[randomNumber];
+		}
+		if (bedType == "Any")
+		{
+			Random r=new Random();        
+			int randomNumber = r.nextInt(roomCodeArr.length);
+			roomCode = bedTypeArr[randomNumber];
+		}
+
+		String checkResAvailSQL = 
+		"SELECT COUNT(*) " +
+		"FROM lab7_reservations " +
+		"WHERE " +
+		"(CheckIn >= ? AND CheckIn < ? AND RoomCode = ?) " +
+		"OR " +
+		"(CheckOut > ? AND CheckOut <= ? AND RoomCode = ?) " +
+		"OR " +
+		"(CheckIn <= ? AND CheckOut >= ? AND RoomCode = ?";
+
+
+		conn.setAutoCommit(false);
+	    try (PreparedStatement pstmt = conn.prepareStatement(checkResAvailSQL))
+		{
+			pstmt.setString(1, checkIn);
+			pstmt.setString(2, checkOut);
+			pstmt.setString(3, roomCode);
+
+			pstmt.setString(4, checkIn);
+			pstmt.setString(5, checkOut);
+			pstmt.setString(6, roomCode);
+
+			pstmt.setString(7, checkIn);
+			pstmt.setString(8, checkOut);
+			pstmt.setString(9, roomCode);
+			ResultSet rs = pstmt.executeQuery(checkResAvailSQL);
+
+			int conflictCount = -1;
+			while(rs.next())
+			{
+				conflictCount = rs.getInt("COUNT(*)");
+			}
+			if (conflictCount > 0) {
+				System.out.println("Conflict encountered");
+			}
+			else {
+				System.out.println("No conflict encountered");
+				// make reservation
+			}
+		}
 
 		// Step 5: Receive results
-		while (rs.next()) {
-		    String flavor = rs.getString("Flavor");
-		    String food = rs.getString("Food");
-		    float price = rs.getFloat("price");
-		    System.out.format("%s %s ($%.2f) %n", flavor, food, price);
-		}
+		// while (rs.next()) {
+		//     String flavor = rs.getString("Flavor");
+		//     String food = rs.getString("Food");
+		//     float price = rs.getFloat("price");
+		//     System.out.format("%s %s ($%.2f) %n", flavor, food, price);
+		// }
 	    }
 
 	    // Step 6: (omitted in this example) Commit or rollback transaction
 	}
 	// Step 7: Close connection (handled by try-with-resources syntax)
-    }
 
 
     // Demo3 - Establish JDBC connection, execute DML query (UPDATE)
