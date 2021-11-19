@@ -62,31 +62,6 @@ export HP_JDBC_PW=...
 
 public class InnReservations {
     public static void main(String[] args) {
-<<<<<<< Updated upstream
-	try {
-        Scanner sc = new Scanner(System.in);
-		System.out.println("Welcome to our CSC 365 Inn Reservation System!");
-        System.out.println("Please select an option: 1, 2, 3, 4, 5, 6 (0 = quit)");
-        int demoNum = sc.nextInt(); 
-
-	    InnReservations ir = new InnReservations();
-            // int demoNum = Integer.parseInt(args[0]);
-            
-            switch (demoNum) {
-            case 0: break;
-            case 1: ir.fr1(); break;
-            case 2: ir.demo2(); break;
-            case 3: ir.demo3(); break;
-            case 4: ir.demo4(); break;
-            case 5: ir.demo5(); break;
-            }
-            
-	} catch (SQLException e) {
-	    System.err.println("SQLException: " + e.getMessage());
-	} catch (Exception e2) {
-            System.err.println("Exception: " + e2.getMessage());
-        }
-=======
 		try {
 			Scanner sc = new Scanner(System.in);
 			System.out.println("Welcome to our CSC 365 Inn Reservation System!");
@@ -114,7 +89,6 @@ public class InnReservations {
 		} catch (Exception e2) {
 				System.err.println("Exception: " + e2.getMessage());
 			}
->>>>>>> Stashed changes
     }
 
     // FR1 - Establish JDBC connection, execute DDL statement
