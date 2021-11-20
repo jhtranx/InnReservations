@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 
@@ -79,7 +80,8 @@ public class InnReservations {
 				case 2: ir.demo2(); break;
 				case 3: ir.fr3(); break;
 				case 4: ir.fr4(); break;
-				case 5: ir.demo5(); break;
+				case 5: ir.fr5(); break;
+                case 6: ir.fr6(); break;
 				}
 				System.out.println("Please select an option: Rooms and Rates (1), Reservations (2), Reservation Changes (3), Reservation Cancellation (4), Detailed Reservation Information (5), Revenue (6) (0 = quit)");
 				demoNum = sc.nextInt(); 
@@ -469,48 +471,158 @@ public class InnReservations {
 
 
 
-    // Demo5 - Construct a query using PreparedStatement
-    private void demo5() throws SQLException {
+    // FR5: Detailed Reservation Information
+    private void fr5() throws SQLException {
 
-        System.out.println("demo5: Run SELECT query using PreparedStatement\r\n");
+        System.out.println("FR5: Present a search prompt \r\n");
         
-	// Step 1: Establish connection to RDBMS
-	try (Connection conn = DriverManager.getConnection(System.getenv("HP_JDBC_URL"),
-							   System.getenv("HP_JDBC_USER"),
-							   System.getenv("HP_JDBC_PW"))) {
-	    Scanner scanner = new Scanner(System.in);
-	    System.out.print("Find pastries with price <=: ");
-	    Double price = Double.valueOf(scanner.nextLine());
-	    System.out.print("Filter by flavor (or 'Any'): ");
-	    String flavor = scanner.nextLine();
+        // Step 1: Establish connection to RDBMS
+        try (Connection conn = DriverManager.getConnection(System.getenv("HP_JDBC_URL"),
+                                System.getenv("HP_JDBC_USER"),
+                                System.getenv("HP_JDBC_PW"))) {
 
-	    List<Object> params = new ArrayList<Object>();
-	    params.add(price);
-	    StringBuilder sb = new StringBuilder("SELECT * FROM hp_goods WHERE price <= ?");
-	    if (!"any".equalsIgnoreCase(flavor)) {
-		sb.append(" AND Flavor = ?");
-		params.add(flavor);
-	    }
-	    
-	    try (PreparedStatement pstmt = conn.prepareStatement(sb.toString())) {
-		int i = 1;
-		for (Object p : params) {
-		    pstmt.setObject(i++, p);
-		}
+            List<String> headers = Arrays.asList("FirstName","LastName","CheckIn","CheckOut","Room","Code");
+            List<String> inputs = new ArrayList<String>();
 
-		try (ResultSet rs = pstmt.executeQuery()) {
-		    System.out.println("Matching Pastries:");
-		    int matchCount = 0;
-		    while (rs.next()) {
-			System.out.format("%s %s ($%.2f) %n", rs.getString("Flavor"), rs.getString("Food"), rs.getDouble("price"));
-			matchCount++;
-		    }
-		    System.out.format("----------------------%nFound %d match%s %n", matchCount, matchCount == 1 ? "" : "es");
-		}
-	    }
+            Scanner scanner = new Scanner(System.in);
 
-	}
+            // Step 2: Asking the user for query input
+            System.out.print("Filter by first name (or 'Any'): ");
+            String fName = scanner.nextLine();
+            inputs.add(fName);
+
+            System.out.print("Filter by last name (or 'Any'): ");
+            String lName = scanner.nextLine();
+            inputs.add(lName);
+
+            System.out.print("Filter by check in (or 'Any'): ");
+            String checkIn = scanner.nextLine();
+            inputs.add(checkIn);
+
+            System.out.print("Filter by check out (or 'Any'): ");
+            String checkOut = scanner.nextLine();
+            inputs.add(checkOut);
+
+            System.out.print("Filter by room (or 'Any'): ");
+            String room = scanner.nextLine();
+            inputs.add(room);
+
+            System.out.print("Filter by code (or 'Any'): ");
+            String code = scanner.nextLine();
+            inputs.add(code);
+            
+
+            List<String> params = new ArrayList<String>();
+            StringBuilder sb = new StringBuilder("SELECT * FROM lab7_reservations WHERE ");
+
+            int firstFlag = 0;
+            for (int i = 0; i < inputs.size(); i++) {
+
+                String curr = inputs.get(i);
+                String header = headers.get(i);
+
+                if (!"any".equalsIgnoreCase(curr)) {
+                    if (firstFlag != 0) {
+                        sb.append(" AND ");
+                    }
+                    if (curr.indexOf('%') != -1) {
+                        sb.append(header + " LIKE ?");
+                    }
+                    else {
+                        sb.append(header + " = ?");
+                    }
+
+                    params.add(curr);
+                    firstFlag = 1;
+                }
+            }
+            System.out.println(sb);
+                                
+            try (PreparedStatement pstmt = conn.prepareStatement(sb.toString())) {
+                int i = 1;
+                for (Object p : params) {
+                    pstmt.setObject(i++, p);
+                }
+
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    System.out.println("Result(s) Found:");
+                    int matchCount = 0;
+                    while (rs.next()) {
+                        System.out.format("%s %s (%s, %s) %s %s (%d, %d) %n", 
+                            rs.getString("FirstName"), rs.getString("LastName"), rs.getDate("CheckIn"),
+                            rs.getDate("CheckOut"), rs.getString("CODE"), rs.getString("Room"), 
+                            rs.getInt("Adults"), rs.getInt("Kids"));
+                        matchCount++;
+                    }
+                    System.out.format("----------------------%nFound %d match%s %n", matchCount, matchCount == 1 ? "" : "es");
+                }
+            }
+        }
     }
-    
 
+    private static void fr6() throws SQLException
+    {
+        try (Connection conn = DriverManager.getConnection(System.getenv("HP_JDBC_URL"),
+                                System.getenv("HP_JDBC_USER"),
+                                System.getenv("HP_JDBC_PW"))) {
+
+            System.out.println("FR6: Revenue \r\n");
+
+            String january, february, march, april, may, june, july, august,
+                september, october, november, december, annual, room;
+            
+            january = february = march = april = may = june = july = august
+                = september = october = november = december = annual = room = "";
+                
+            String sql = "with revTable as (SELECT Room," + 
+                "ROUND(SUM(CASE WHEN MONTH(Checkout) = 1 THEN DATEDIFF(Checkout, CheckIn) * rate else 0 end), 0) as January, " +
+                "ROUND(SUM(CASE WHEN MONTH(Checkout) = 2 THEN DATEDIFF(Checkout, CheckIn) * rate else 0 end), 0) as February," +
+                "ROUND(SUM(CASE WHEN MONTH(Checkout) = 3 THEN DATEDIFF(Checkout, CheckIn) * rate else 0 end), 0) as March, " +
+                "ROUND(SUM(CASE WHEN MONTH(Checkout) = 4 THEN DATEDIFF(Checkout, CheckIn) * rate else 0 end), 0) as April, " +
+                "ROUND(SUM(CASE WHEN MONTH(Checkout) = 5 THEN DATEDIFF(Checkout, CheckIn) * rate else 0 end), 0) as May, " +
+                "ROUND(SUM(CASE WHEN MONTH(Checkout) = 6 THEN DATEDIFF(Checkout, CheckIn) * rate else 0 end), 0) as June, " +
+                "ROUND(SUM(CASE WHEN MONTH(Checkout) = 7 THEN DATEDIFF(Checkout, CheckIn) * rate else 0 end), 0) as July, " +
+                "ROUND(SUM(CASE WHEN MONTH(Checkout) = 8 THEN DATEDIFF(Checkout, CheckIn) * rate else 0 end), 0) as August, " +
+                "ROUND(SUM(CASE WHEN MONTH(Checkout) = 9 THEN DATEDIFF(Checkout, CheckIn) * rate else 0 end), 0) as September, " +
+                "ROUND(SUM(CASE WHEN MONTH(Checkout) = 10 THEN DATEDIFF(Checkout, CheckIn) * rate else 0 end), 0) as October, " +
+                "ROUND(SUM(CASE WHEN MONTH(Checkout) = 11 THEN DATEDIFF(Checkout, CheckIn) * rate else 0 end), 0) as November, " +
+                "ROUND(SUM(CASE WHEN MONTH(Checkout) = 12 THEN DATEDIFF(Checkout, CheckIn) * rate else 0 end), 0) as December, " +
+                "ROUND(SUM(DATEDIFF(Checkout, Checkin) * rate), 0) as Annual " +
+            "FROM lab7_reservations GROUP BY Room ) " +
+            "SELECT Room, January, February, March, April, May, June, July, August, September, October, November, December, Annual " +
+            "FROM revTable UNION " +
+            "SELECT 'Total', SUM(January), SUM(February), SUM(March), SUM(April), SUM(May), SUM(June), SUM(July), SUM(August)," +
+                "SUM(September), SUM(October), SUM(November), SUM(December), SUM(Annual) FROM revTable;";
+
+            try (Statement stm = conn.createStatement())
+            {
+                ResultSet rs = stm.executeQuery(sql);
+
+                System.out.format("%-8s %-8s %-8s %-8s %-8s %-8s %-8s %-8s %-8s %-8s %-8s %-8s %-8s %-8s \n\n", 
+                    "Room", "Jan.", "Feb.", "Mar.", "Apr.", "May", "Jun.", "Jul.", "Aug.", "Sep.", "Oct.", "Nov.", "Dec.", "Annual");
+
+                while (rs.next())
+                {
+                    january = rs.getString("January");
+                    february = rs.getString("February");
+                    march = rs.getString("March");
+                    april = rs.getString("April");
+                    may = rs.getString("May");
+                    june = rs.getString("June");
+                    july = rs.getString("July");
+                    august = rs.getString("August");
+                    september = rs.getString("September");
+                    october = rs.getString("October");
+                    november = rs.getString("November");
+                    december = rs.getString("December");
+                    room = rs.getString("Room");
+                    annual = rs.getString("Annual");
+
+                    System.out.format("%-8s %-8s %-8s %-8s %-8s %-8s %-8s %-8s %-8s %-8s %-8s %-8s %-8s %-8s\n", 
+                        room , january, february, march, april, may, june, july, august, 
+                        september, october, november, december, annual);
+                }
+            }
+        }
+    }
 }
