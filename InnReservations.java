@@ -84,6 +84,7 @@ public class InnReservations {
 				}
 				System.out.println("Please select an option: Rooms and Rates (1), Reservations (2), Reservation Changes (3), Reservation Cancellation (4), Detailed Reservation Information (5), Revenue (6) (0 = quit)");
 				demoNum = sc.nextInt(); 
+			sc.close();
 			}
 				
 		} catch (SQLException e) {
