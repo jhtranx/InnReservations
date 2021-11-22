@@ -182,9 +182,9 @@ public class InnReservations {
 		// Check if occ exceeds maxOcc
 		String getMaxOcc = "SELECT MAX(maxOcc) AS maxOccAllowed FROM lab7_rooms";
 		conn.setAutoCommit(false);
-	    try (PreparedStatement pstmt = conn.prepareStatement(getMaxOcc))
+	    try (PreparedStatement maxOccQ = conn.prepareStatement(getMaxOcc))
 		{
-			ResultSet rs = pstmt.executeQuery(getMaxOcc);
+			ResultSet rs = maxOccQ.executeQuery(getMaxOcc);
 			while(rs.next()) {
 				int maxOcc = rs.getInt("maxOccAllowed");
 				if (totOcc > maxOcc){
@@ -195,32 +195,99 @@ public class InnReservations {
 			}
 			
 		}
-		String[] roomCodeArr = {"AOB", "CAS", "FNA", "HBB", "IBD", "IBS", "MWC", "RND", "RTE", "SAY", "TAA"};
-		String[] bedTypeArr = {"Queen", "King", "Double"};
+		String[] allBedTypeArr = {"Queen", "King", "Double"};
 
-		if (roomCode == "Any")
+		ArrayList<String> roomCodeArr = new ArrayList<String>();
+		
+		if (roomCode.equals("Any"))
 		{
+			// if room code is not specified, look at all rooms that have an opening and meet maxOcc requirements
+			// there is a possibility in which no results will be returned (no rooms have openings with maxOcc requirements met)
+			// we will catch that edge case below (look for #catch)
+			String availRoomsForAnyCode = 
+			"SELECT * " +
+			"FROM lab7_rooms " +
+			"WHERE RoomCode NOT IN ( " +
+			"\n" +
+			"SELECT DISTINCT RoomCode " +
+			"FROM lab7_reservations " +
+			"	INNER JOIN lab7_rooms r ON r.RoomCode = Room " +
+			"WHERE " +
+			"(CheckIn >= ? AND CheckIn < ? AND r.maxOcc >= ?) " +
+			"OR " +
+			"(CheckOut > ? AND CheckOut <= ? AND r.maxOcc >= ?) " +
+			"OR " +
+			"(CheckIn <= ? AND CheckOut >= ? AND r.maxOcc >= ?) " +
+			") AND maxOcc >= ?";
+
+			conn.setAutoCommit(false);
+			try (PreparedStatement anyCode = conn.prepareStatement(availRoomsForAnyCode))
+			{
+				anyCode.setString(1, checkIn);
+				anyCode.setString(2, checkOut);
+				anyCode.setInt(3, totOcc);
+
+				anyCode.setString(4, checkIn);
+				anyCode.setString(5, checkOut);
+				anyCode.setInt(6, totOcc);
+
+				anyCode.setString(7, checkIn);
+				anyCode.setString(8, checkOut);
+				anyCode.setInt(9, totOcc);
+				anyCode.setInt(10, totOcc);
+
+				ResultSet roomOpts = anyCode.executeQuery();
+
+				while(roomOpts.next())
+				{
+					roomCodeArr.add(roomOpts.getString("RoomCode"));
+				}
+			}
 			Random r=new Random();        
-			int randomNumber = r.nextInt(roomCodeArr.length);
-			roomCode = roomCodeArr[randomNumber];
+			int randomNumber = r.nextInt(roomCodeArr.size());
+			roomCode = roomCodeArr.get(randomNumber);
 		}
-		if (bedType == "Any")
+		if (bedType.equals("Any"))
 		{
 			Random r=new Random();        
-			int randomNumber = r.nextInt(roomCodeArr.length);
-			roomCode = bedTypeArr[randomNumber];
+			int randomNumber = r.nextInt(allBedTypeArr.length);
+			bedType = allBedTypeArr[randomNumber];
 		}
 
 		String checkResAvailSQL = 
 		"SELECT COUNT(*) " +
 		"FROM lab7_reservations " +
 		"WHERE " +
-		"(CheckIn >= ? AND CheckIn < ? AND RoomCode = ?) " +
+		"(CheckIn >= ? AND CheckIn < ? AND Room = ?) " +
 		"OR " +
-		"(CheckOut > ? AND CheckOut <= ? AND RoomCode = ?) " +
+		"(CheckOut > ? AND CheckOut <= ? AND Room = ?) " +
 		"OR " +
-		"(CheckIn <= ? AND CheckOut >= ? AND RoomCode = ?";
+		"(CheckIn <= ? AND CheckOut >= ? AND Room = ?)";
 
+		// #catch as mentioned earlier this will catch situation where no rooms are open when roomcode is any
+		// in which case roomCode would still be "Any" and you can't have that in the SQL stmt
+		// soln = find random room name ASAP
+
+		// if (roomCodeArr.size() == 0)
+		// {
+		// 	String getRoomsForTotOcc = 
+		// 	"SELECT * " +
+		// 	"FROM lab7_rooms " +
+		// 	"WHERE maxOcc >= ? ";
+
+		// 	conn.setAutoCommit(false);
+		// 	try (PreparedStatement gr = conn.prepareStatement(getRoomsForTotOcc))
+		// 	{
+		// 		gr.setInt(1, totOcc);
+		// 		ResultSet roomOpts = gr.executeQuery();
+
+		// 		while(roomOpts.next())
+		// 		{
+		// 			roomCode = roomOpts.getString("RoomCode");
+		// 		}
+		// 	}
+		// }
+			
 
 		conn.setAutoCommit(false);
 	    try (PreparedStatement pstmt = conn.prepareStatement(checkResAvailSQL))
@@ -236,7 +303,7 @@ public class InnReservations {
 			pstmt.setString(7, checkIn);
 			pstmt.setString(8, checkOut);
 			pstmt.setString(9, roomCode);
-			ResultSet rs = pstmt.executeQuery(checkResAvailSQL);
+			ResultSet rs = pstmt.executeQuery();
 
 			int conflictCount = -1;
 			while(rs.next())
@@ -245,6 +312,128 @@ public class InnReservations {
 			}
 			if (conflictCount > 0) {
 				System.out.println("Conflict encountered");
+
+				String getRoomsForTotOcc = 
+				"SELECT * " +
+				"FROM lab7_rooms " +
+				"WHERE maxOcc >= ? ";
+
+				conn.setAutoCommit(false);
+				try (PreparedStatement allRoomsForTotOcc = conn.prepareStatement(getRoomsForTotOcc))
+				{
+					allRoomsForTotOcc.setInt(1, totOcc);
+					ResultSet roomOpts = allRoomsForTotOcc.executeQuery();
+
+					while(roomOpts.next())
+					{
+						roomCodeArr.add(roomOpts.getString("RoomCode"));
+					}
+				}
+
+				String checkOtherDates = 
+				"with allFutureRes AS ( " +
+				"	SELECT * " +
+				"	FROM lab7_reservations " +
+				"	WHERE Room = ? AND CheckIn > ? " +
+				"	ORDER BY CheckIn " +
+				"), " +
+				"\n" +
+				"minCheckIn AS ( " +
+				"	SELECT Room as room, MIN(CheckIn) as nextResDate " +
+				"	FROM allFutureRes " +
+				"), " +
+				"\n" +
+				"minRes AS ( " +
+				"	SELECT r.Room, r.CheckIn, r.CheckOut " +
+				"	FROM lab7_reservations r " +
+				"		INNER JOIN minCheckIn m ON m.room = r.Room " +
+				"	WHERE CheckIn = (SELECT nextResDate FROM minCheckIn) " +
+				"), " +
+				"\n" + 
+				"nextMinCheckIn AS ( " +
+				"	SELECT MIN(l.CheckIn) AS secondMin " +
+				"	FROM lab7_reservations l " +
+				"		INNER JOIN minRes n ON l.Room = n.Room " +
+				"	WHERE l.CheckIn > (SELECT n.CheckIn FROM minRes n) " +
+				"), " +
+				"\n" +
+				"nextRes AS ( " +
+				"	SELECT r.Room, r.CheckIn, r.CheckOut " +
+				"	FROM lab7_reservations r " +
+				"		INNER JOIN minCheckIn m ON m.room = r.Room " +
+				"	WHERE CheckIn = (SELECT secondMin FROM nextMinCheckIn) " +
+				"), " +
+				"\n" +
+				"twoDatesRes AS ( " +
+				"	SELECT m.CheckIn as checkInA, m.CheckOut as checkOutA, n.CheckIn as checkInB, n.CheckOut as checkOutB " +
+				"	FROM minRes m, nextRes n " +
+				") " +
+				"\n" +
+				"SELECT *, DATEDIFF(checkInB, checkOutA) as nightsAvail " +
+				"FROM twoDatesRes;";
+				conn.setAutoCommit(false);
+				try (PreparedStatement pstmtB = conn.prepareStatement(checkOtherDates))
+				{
+					Integer i = 0;
+					String ogCheckIn = checkIn;
+					pstmtB.setString(1, roomCode);
+					pstmtB.setString(2, checkIn);
+					
+					ResultSet rsB = pstmtB.executeQuery();
+					ArrayList<String> options = new ArrayList<String>();
+
+					while (options.size() != 5)
+					{
+						pstmtB.setString(1, roomCode);
+						pstmtB.setString(2, checkIn);
+
+						rsB = pstmtB.executeQuery();
+
+						String checkInA = null;
+						String checkOutA = null;
+						String checkInB = null;
+						String checkOutB = null;
+						Integer nightsAvail = 0;
+
+						while(rsB.next())
+						{
+							checkInA = rsB.getString("checkInA");
+							
+							checkOutA = rsB.getString("checkOutA");
+
+							checkInB = rsB.getString("checkInB");
+							checkOutB = rsB.getString("checkOutB");
+
+							nightsAvail = rsB.getInt("nightsAvail");
+
+							System.out.println(roomCode + " " + checkInA + " " + checkOutA + " " + checkInB + " " + checkOutB + " " + nightsAvail);
+						}
+						if (nightsAvail > 0)
+						{
+							options.add(checkOutA);
+							i++;
+							roomCode = roomCodeArr.get(i);
+							checkIn = ogCheckIn;
+						}
+						else
+						{
+							if (checkIn.equals(checkOutB))
+							{
+								i++;
+								checkOutB = ogCheckIn;
+							}
+							checkIn = checkOutB;
+						}
+						if (i == roomCodeArr.size())
+						{
+							i = 0;
+						}
+					}
+					
+				} catch (SQLException e) {
+					System.out.println(e.getMessage());
+					conn.rollback();
+				}
 			}
 			else {
 				System.out.println("No conflict encountered");
