@@ -6,14 +6,18 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 
 import java.util.Map;
+import java.util.Random;
 import java.util.Scanner;
 import java.util.LinkedHashMap;
 import java.time.LocalDate;
+import java.time.Period;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.logging.Logger;
 import java.util.logging.Level;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 
 /*
 JDBC setup (on Emily's labthreesixfive)
@@ -70,6 +74,7 @@ public class InnReservations {
 			System.out.println("Welcome to our CSC 365 Inn Reservation System!");
 			System.out.println("Please select an option: Rooms and Rates (1), Reservations (2), Reservation Changes (3), Reservation Cancellation (4), Detailed Reservation Information (5), Revenue (6) (0 = quit)");
 			int demoNum = sc.nextInt(); 
+			sc.nextLine();
 
 			InnReservations ir = new InnReservations();
 				// int demoNum = Integer.parseInt(args[0]);
@@ -77,7 +82,7 @@ public class InnReservations {
 				switch (demoNum) {
 				case 0: break;
 				case 1: ir.fr1(); break;
-				case 2: ir.demo2(); break;
+				case 2: ir.fr2(sc); break;
 				case 3: ir.fr3(); break;
 				case 4: ir.fr4(); break;
 				case 5: ir.fr5(); break;
@@ -85,7 +90,9 @@ public class InnReservations {
 				}
 				System.out.println("Please select an option: Rooms and Rates (1), Reservations (2), Reservation Changes (3), Reservation Cancellation (4), Detailed Reservation Information (5), Revenue (6) (0 = quit)");
 				demoNum = sc.nextInt(); 
+				sc.nextLine();
 			}
+			sc.close();
 				
 		} catch (SQLException e) {
 			System.err.println("SQLException: " + e.getMessage());
@@ -115,7 +122,7 @@ public class InnReservations {
 							   System.getenv("HP_JDBC_PW"))) {
 	    // Step 2: Construct SQL statement
 	    // String sql = "ALTER TABLE hp_goods ADD COLUMN AvailUntil DATE";
-        String sql = "SELECT * FROM lab7_rooms";
+        String sql = "SELECT * FROM res";
 
 	    // Step 3: (omitted in this example) Start transaction
 
@@ -127,12 +134,13 @@ public class InnReservations {
 		while (rs.next()) {
 		    String roomCode = rs.getString("RoomCode");
 		    String roomName = rs.getString("RoomName");
-		    int numBeds = rs.getInt("Beds");
-            String bedType = rs.getString("bedType");
-		    int maxOcc = rs.getInt("maxOcc");
-		    float basePrice = rs.getFloat("basePrice");
-            String decor = rs.getString("decor");
-		    System.out.format("%s %s %d %s %d ($%.2f) %s \n", roomCode, roomName, numBeds, bedType, maxOcc, basePrice, decor);
+		    Float popularity = rs.getFloat("Popularity");
+            String nextAvail = rs.getString("nextAvail");
+		    String checkOut = rs.getString("CheckOut");
+		    int totDays = rs.getInt("totDays");
+            System.out.format("%s %s %.2f %s %s %d \n", 
+			                    roomCode, roomName, popularity, 
+								nextAvail, checkOut, totDays);
 		}
 	    }
 
@@ -143,36 +151,426 @@ public class InnReservations {
     
 
     // Demo2 - Establish JDBC connection, execute SELECT query, read & print result
-    private void demo2() throws SQLException {
+    private void fr2(Scanner fr2sc) throws SQLException {
 
-        System.out.println("demo2: List content of hp_goods table\r\n");
+        System.out.println("FR2: Reservations\r\n");
         
 	// Step 1: Establish connection to RDBMS
 	try (Connection conn = DriverManager.getConnection(System.getenv("HP_JDBC_URL"),
 							   System.getenv("HP_JDBC_USER"),
 							   System.getenv("HP_JDBC_PW"))) {
 	    // Step 2: Construct SQL statement
-	    String sql = "SELECT * FROM hp_goods";
 
-	    // Step 3: (omitted in this example) Start transaction
+		// get user input
+		System.out.println("Please enter your first name: ");
+		String firstName = fr2sc.nextLine();
+		System.out.println("Please enter your last name: ");
+		String lastName = fr2sc.nextLine();
+		System.out.println("Please enter your room code: (Enter 'Any' to indicate no preference)");
+		String roomCode = fr2sc.nextLine();
+		System.out.println("Please enter your desired bed type: (Enter 'Any' to indicate not preference)");
+		String bedType = fr2sc.nextLine();
+		System.out.println("Please enter your anticipated check-in date (yyyy-mm-dd): ");
+		String checkIn = fr2sc.nextLine();
+		System.out.println("Please enter your anticipated check-out date (yyyy-mm-dd): ");
+		String checkOut = fr2sc.nextLine();
+		System.out.println("Please enter the number of adults: ");
+		Integer numAdults = fr2sc.nextInt();
+		System.out.println("Please enter the number of children: ");
+		Integer numChildren = fr2sc.nextInt();
+		Integer totOcc = numAdults + numChildren;
 
-	    // Step 4: Send SQL statement to DBMS
-	    try (Statement stmt = conn.createStatement();
-		 ResultSet rs = stmt.executeQuery(sql)) {
+		// Check if occ exceeds maxOcc
+		String getMaxOcc = "SELECT MAX(maxOcc) AS maxOccAllowed FROM lab7_rooms";
+		conn.setAutoCommit(false);
+	    try (PreparedStatement maxOccQ = conn.prepareStatement(getMaxOcc))
+		{
+			ResultSet rs = maxOccQ.executeQuery(getMaxOcc);
+			while(rs.next()) {
+				int maxOcc = rs.getInt("maxOccAllowed");
+				if (totOcc > maxOcc){
+					System.out.println("No suitable rooms are available");
+					return;
+					// RETURN TO MAIN MENU
+				}
+			}
+			
+		}
+		String[] allBedTypeArr = {"Queen", "King", "Double"};
+
+		ArrayList<String> roomCodeArr = new ArrayList<String>();
+		
+		// account for situation where roomCode = Any
+		if (roomCode.equals("Any"))
+		{
+			String availRoomsForAnyCode = 
+			"SELECT * " +
+			"FROM lab7_rooms " +
+			"WHERE maxOcc >= ? ";
+
+			conn.setAutoCommit(false);
+			try (PreparedStatement anyCode = conn.prepareStatement(availRoomsForAnyCode))
+			{
+				anyCode.setInt(1, totOcc);
+
+				ResultSet roomOpts = anyCode.executeQuery();
+
+				while(roomOpts.next())
+				{
+					roomCodeArr.add(roomOpts.getString("RoomCode"));
+				}
+			}
+			Random r=new Random();        
+			int randomNumber = r.nextInt(roomCodeArr.size());
+			roomCode = roomCodeArr.get(randomNumber);
+		}
+
+		if (bedType.equals("Any"))
+		{
+			Random r=new Random();        
+			int randomNumber = r.nextInt(allBedTypeArr.length);
+			bedType = allBedTypeArr[randomNumber];
+		}
+
+		// check if there is an existing conflict in reservation dates
+		String checkResAvailSQL = 
+		"SELECT COUNT(*) " +
+		"FROM lab7_reservations " +
+		"WHERE " +
+		"(CheckIn >= ? AND CheckIn < ? AND Room = ?) " +
+		"OR " +
+		"(CheckOut > ? AND CheckOut <= ? AND Room = ?) " +
+		"OR " +
+		"(CheckIn <= ? AND CheckOut >= ? AND Room = ?)";	
+
+		conn.setAutoCommit(false);
+	    try (PreparedStatement pstmt = conn.prepareStatement(checkResAvailSQL))
+		{
+			pstmt.setString(1, checkIn);
+			pstmt.setString(2, checkOut);
+			pstmt.setString(3, roomCode);
+
+			pstmt.setString(4, checkIn);
+			pstmt.setString(5, checkOut);
+			pstmt.setString(6, roomCode);
+
+			pstmt.setString(7, checkIn);
+			pstmt.setString(8, checkOut);
+			pstmt.setString(9, roomCode);
+			ResultSet rs = pstmt.executeQuery();
+
+			int conflictCount = -1;
+			while(rs.next())
+			{
+				conflictCount = rs.getInt("COUNT(*)");
+			}
+			conn.commit();
+
+			ArrayList<LocalDate> options = new ArrayList<LocalDate>();
+			ArrayList<LocalDate> optionsEndDate = new ArrayList<LocalDate>();
+			Integer optionSelected = -1;
+
+			if (conflictCount > 0) {
+				// find 5 other options since a conflict has been encountered
+				System.out.println("\nSorry, those dates are not available.");
+				System.out.println("Here are some other date options we have instead: \n");
+				
+				// first, find the maxCheckOut date the room has been booked
+				String getMaxCheckOutDate = 
+				"with allResForCode AS ( " +
+				"	SElECT * " +
+				"	FROM lab7_reservations " +
+				"	WHERE Room = ? " +
+				"	ORDER BY CheckOut ASC " +
+				") " + 
+				"\n" +
+				"SELECT MAX(CheckOut) as maxCheckOut " +
+				"FROM allResForCode";
+
+				LocalDate maxDateLD;
+				String maxDate = null;
+
+				conn.setAutoCommit(false);
+				try (PreparedStatement maxCheckOut = conn.prepareStatement(getMaxCheckOutDate))
+				{
+					maxCheckOut.setString(1, roomCode);
+					ResultSet ds = maxCheckOut.executeQuery();
+
+					while(ds.next())
+					{
+						maxDate = ds.getString("maxCheckOut");
+					}
+				}
+				conn.commit();
+				// turn maxDate to a LocalDate obj
+				maxDateLD = LocalDate.parse(maxDate);
+				
+				// check if checkIn == maxDate
+				// this is the start of the while loop
+				// 	loop until you hit 5 options
+				LocalDate checkInLD = LocalDate.parse(checkIn);
+				LocalDate checkOutLD = LocalDate.parse(checkOut);
+				LocalDate newDate = LocalDate.now();
+				long daysToAdd = ChronoUnit.DAYS.between(checkInLD, checkOutLD);
+				Integer resCountNum = -1;
+
+				LocalDate checkInA = null;
+				LocalDate checkOutA = null;
+				LocalDate checkInB = null;
+				LocalDate checkOutB = null;
+				Integer nightsAvail = 0;
+
+				Integer optCount = 1;
+
+				while (options.size() < 5)
+				{
+					String getResCountTilLast =
+					"SELECT COUNT(*) " +
+					"FROM lab7_reservations " +
+					"WHERE Room = ? AND CheckIn > ? " +
+					"ORDER BY CheckIn";
+					conn.setAutoCommit(false);
+					try (PreparedStatement resCount = conn.prepareStatement(getResCountTilLast))
+					{
+						resCount.setString(1, roomCode);
+						resCount.setString(2, checkInLD.toString());
+
+						ResultSet rc = resCount.executeQuery();
+		
+						while(rc.next())
+						{
+							resCountNum = rc.getInt("COUNT(*)");
+						}
+					}
+					conn.commit();
+
+					// check if there is atleast 2 more reservation before you hit maxDate
+					if (resCountNum > 1)
+					{
+						// run check other dates
+						String checkOtherDates = 
+						"with allFutureRes AS ( " +
+						"	SELECT * " +
+						"	FROM lab7_reservations " +
+						"	WHERE Room = ? AND CheckIn > ? " +
+						"	ORDER BY CheckIn " +
+						"), " +
+						"\n" +
+						"minCheckIn AS ( " +
+						"	SELECT Room as room, MIN(CheckIn) as nextResDate " +
+						"	FROM allFutureRes " +
+						"), " +
+						"\n" +
+						"minRes AS ( " +
+						"	SELECT r.Room, r.CheckIn, r.CheckOut " +
+						"	FROM lab7_reservations r " +
+						"		INNER JOIN minCheckIn m ON m.room = r.Room " +
+						"	WHERE CheckIn = (SELECT nextResDate FROM minCheckIn) " +
+						"), " +
+						"\n" + 
+						"nextMinCheckIn AS ( " +
+						"	SELECT MIN(l.CheckIn) AS secondMin " +
+						"	FROM lab7_reservations l " +
+						"		INNER JOIN minRes n ON l.Room = n.Room " +
+						"	WHERE l.CheckIn > (SELECT n.CheckIn FROM minRes n) " +
+						"), " +
+						"\n" +
+						"nextRes AS ( " +
+						"	SELECT r.Room, r.CheckIn, r.CheckOut " +
+						"	FROM lab7_reservations r " +
+						"		INNER JOIN minCheckIn m ON m.room = r.Room " +
+						"	WHERE CheckIn = (SELECT secondMin FROM nextMinCheckIn) " +
+						"), " +
+						"\n" +
+						"twoDatesRes AS ( " +
+						"	SELECT m.CheckIn as checkInA, m.CheckOut as checkOutA, n.CheckIn as checkInB, n.CheckOut as checkOutB " +
+						"	FROM minRes m, nextRes n " +
+						") " +
+						"\n" +
+						"SELECT *, DATEDIFF(checkInB, checkOutA) as nightsAvail " +
+						"FROM twoDatesRes;";
+						conn.setAutoCommit(false);
+						try (PreparedStatement pstmtB = conn.prepareStatement(checkOtherDates))
+						{
+							pstmtB.setString(1, roomCode);
+							pstmtB.setString(2, checkInLD.toString());
+							
+							ResultSet rsB = pstmtB.executeQuery();
+
+							while(rsB.next())
+							{
+								checkInA = LocalDate.parse(rsB.getString("checkInA"));
+								checkOutA = LocalDate.parse(rsB.getString("checkOutA"));
+
+								checkInB = LocalDate.parse(rsB.getString("checkInB"));
+								checkOutB = LocalDate.parse(rsB.getString("checkOutB"));
+
+								nightsAvail = rsB.getInt("nightsAvail");
+							}
+							if (nightsAvail > 0)
+							{
+								System.out.println(optCount + ") " + roomCode + " " + checkOutA + " " + checkInB);
+								options.add(checkOutA);
+								optionsEndDate.add(checkInB);
+								optCount += 1;
+							}
+							checkInLD = checkOutB;
+						}
+						conn.commit();
+					}
+					else
+					{
+						// go to maxDate and do interval add method
+						// if checkIn date OPTION == maxDate
+						// if (checkInLD.isEqual(maxDateLD) || checkInLD.isAfter(maxDateLD)) 
+						// {
+							// create your own date options because SQL will return null exception (empty set)
+							// to create your own date options:
+							// 	take maxDate + interval = newDate
+						newDate = maxDateLD.plusDays(daysToAdd);
+						System.out.println(optCount + ") " + roomCode + " " + maxDateLD + " " + newDate);
+						options.add(maxDateLD);
+						optionsEndDate.add(newDate);
+
+						maxDateLD = newDate;
+						optCount += 1;
+					}
+					
+				}
+				System.out.println("\nPlease select a different option (1-5); Enter 0 to cancel current request): ");
+				optionSelected = fr2sc.nextInt();
+				fr2sc.nextLine();
+				if (optionSelected == 0)
+				{
+					return;
+				}				
+			}
+			else {
+				System.out.println("This reservation date is available!");
+				optionSelected = 1;
+				options.add(LocalDate.parse(checkIn));
+				optionsEndDate.add(LocalDate.parse(checkOut));
+				// make reservation
+			}
+			conn.commit();
+
+			String getRoomInfo = 
+				"SELECT * " +
+				"FROM lab7_rooms " +
+				"WHERE RoomCode = ?";
+			String roomName = null;
+			String bedTypeForRoom = null;
+			Double baseCost = (double) 0;
+			Double totCost = (double) 0;
+				
+
+			conn.setAutoCommit(false);
+			try (PreparedStatement roomInfo = conn.prepareStatement(getRoomInfo))
+			{
+				roomInfo.setString(1, roomCode);
+				ResultSet ri = roomInfo.executeQuery();
+
+				while(ri.next())
+				{
+					roomName = ri.getString("RoomName");
+					bedTypeForRoom = ri.getString("bedType");
+					baseCost = ri.getDouble("basePrice");
+				}
+			}
+			conn.commit();
+
+			LocalDate startDate = options.get(optionSelected-1);
+			long finalInterval = ChronoUnit.DAYS.between(options.get(optionSelected-1), optionsEndDate.get(optionSelected-1));
+			
+			for (long i = 0; i < finalInterval; i++)
+			{
+				LocalDate curr = startDate.plusDays(i);
+				String currDate = (curr.getDayOfWeek()).toString();
+				if ((currDate).equals("SATURDAY") || (currDate).equals("SUNDAY"))
+				{
+					totCost = totCost + (baseCost*1.1);
+				}
+				else
+				{
+					totCost = totCost + baseCost;
+				}
+			}
+
+			System.out.println("RESERVATION CONFIRMATION: \n");
+			System.out.println("Name: " + firstName + " " + lastName);
+			System.out.println("Room Code: " + roomCode);
+			System.out.println("Room Name: " + roomName);
+			System.out.println("Start Date: " + options.get(optionSelected-1));
+			System.out.println("End Date: " + optionsEndDate.get(optionSelected-1));
+			System.out.println("Bed Type: " + bedTypeForRoom);
+			System.out.println("Number of Adults: " + numAdults);
+			System.out.println("Number of Children: " + numChildren);
+			System.out.format("Total Cost: $%.2f\n", totCost);
+
+			// System.out.println(roomCode + " " + options.get(optionSelected-1) + " " + optionsEndDate.get(optionSelected-1));
+			System.out.println("Please confirm your reservation (0 = No, 1 = Yes): ");
+			Integer yesOrNo = fr2sc.nextInt();
+			fr2sc.nextLine();
+
+			if (yesOrNo == 0)
+			{
+				System.out.println("Goodbye\n");
+				return;
+			}
+			else if (yesOrNo == 1)
+			{
+				//make reservation
+				Integer code = -1;
+
+				String getMaxCode =
+				"SELECT MAX(Code) as maxCode FROM lab7_reservations;";
+				conn.setAutoCommit(false);
+				try (PreparedStatement maxCodeStmt = conn.prepareStatement(getMaxCode))
+				{
+					ResultSet mc = maxCodeStmt.executeQuery();
+
+					while(mc.next())
+					{
+						code = mc.getInt("maxCode");
+					}
+				}
+				conn.commit();
+				
+				code = code + 1;
+				String makeRes = 
+				"INSERT INTO lab7_reservations (CODE, Room, CheckIn, Checkout, Rate, LastName, FirstName, Adults, Kids) VALUES (" +
+				code + ", " + "'" + roomCode + "', " + "'" + (options.get(optionSelected-1)).toString() + "', '" + (optionsEndDate.get(optionSelected-1)).toString() + "', " +
+				baseCost + ", '" + lastName + "', '" + firstName + "', " + numAdults + ", " + numChildren + ");";
+
+				//"INSERT INTO goods (GId, Food, Flavor, Price) VALUES ('51-BLU', 'Danish', 'Blueberry', 1.15);";
+
+				try (PreparedStatement makeResStmt = conn.prepareStatement(makeRes)) 
+				{
+					makeResStmt.executeUpdate();
+					conn.commit();
+				} catch (SQLException e) {
+					conn.rollback();
+					System.out.println(e.getMessage());
+				}
+				System.out.println("Your reservation has been confirmed! Thank you!\n");
+			}
+		}
+		catch (SQLException e) {
+			conn.rollback();
 
 		// Step 5: Receive results
-		while (rs.next()) {
-		    String flavor = rs.getString("Flavor");
-		    String food = rs.getString("Food");
-		    float price = rs.getFloat("price");
-		    System.out.format("%s %s ($%.2f) %n", flavor, food, price);
-		}
+		// while (rs.next()) {
+		//     String flavor = rs.getString("Flavor");
+		//     String food = rs.getString("Food");
+		//     float price = rs.getFloat("price");
+		//     System.out.format("%s %s ($%.2f) %n", flavor, food, price);
+		// }
 	    }
+	}
 
 	    // Step 6: (omitted in this example) Commit or rollback transaction
 	}
 	// Step 7: Close connection (handled by try-with-resources syntax)
-    }
 
 
     // Demo3 - Establish JDBC connection, execute DML query (UPDATE)
